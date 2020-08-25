@@ -7,7 +7,7 @@ import Animated from 'react-native-reanimated';
 function MyTabBar({ state, descriptors, navigation, position }: any) {
   return (
     <View style={{ flexDirection: 'row', paddingTop: 20, backgroundColor: 'blue' }}>
-      {state.routes.map((route, index) => {
+      {state.routes.map((route: any, index: number) => {
         const { options } = descriptors[route.key];
         const label =
           options.tabBarLabel !== undefined

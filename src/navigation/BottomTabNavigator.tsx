@@ -1,11 +1,11 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import * as React from 'react';
-import { TabBarIcon } from '../components/TabBarIcon';
+import { TabBarIcon } from 'components/TabBarIcon';
 
 import Colors from '../constants/Colors';
-import useColorScheme from '../hooks/useColorScheme';
-import { TabTwoNavigator } from '../navigation/TabTwoNavigator';
-import { BottomTabParamList } from '../types';
+import useColorScheme from 'hooks/useColorScheme';
+import { TabTwoNavigator } from 'navigation/TabTwoNavigator';
+import { BottomTabParamList } from 'types';
 import { TabOneNavigator } from './TabOneNavigator';
 
 const BottomTab = createBottomTabNavigator<BottomTabParamList>();

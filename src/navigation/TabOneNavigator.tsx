@@ -3,7 +3,7 @@
 import { createStackNavigator } from '@react-navigation/stack';
 import * as React from 'react';
 import TabOneScreen from '../screens/TabOneScreen';
-import { TabOneParamList } from '../types';
+import { TabOneParamList } from 'types';
 
 const TabOneStack = createStackNavigator<TabOneParamList>();
 
