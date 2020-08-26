@@ -9,27 +9,16 @@
 //     (index + 1) * sizeRef // active - 1
 // ]
 
-export function getInputRangeFromIndexes(range: number[], index: number, carouselProps: any): number[] {
-  const sizeRef = carouselProps.vertical ? carouselProps.itemHeight : carouselProps.itemWidth;
-  let inputRange = [];
+import { Animated } from 'react-native';
 
-  for (let i = 0; i < range.length; i++) {
-    inputRange.push((index - range[i]) * sizeRef);
-  }
-
-  return inputRange;
+export const getInputRangeFromIndexes = (range: number[], index: number, carouselProps: any): number[] => {
+  return range.map((rangeData) => (index - rangeData) * carouselProps.itemWidth);
 }
-
-export type Interpolator = {
-  inputRange: number[];
-  outputRange: number[];
-  extrapolate?: 'extend' | 'identity' | 'clamp';
-};
 
 // Default behavior
 // Scale and/or opacity effect
 // Based on props 'inactiveSlideOpacity' and 'inactiveSlideScale'
-export function defaultScrollInterpolator(index: number, carouselProps: any): Interpolator {
+export const defaultScrollInterpolator = (index: number, carouselProps: any): Animated.InterpolationConfigType => {
   const range = [1, 0, -1];
   const inputRange = getInputRangeFromIndexes(range, index, carouselProps);
   const outputRange = [0, 1, 0];
@@ -37,7 +26,11 @@ export function defaultScrollInterpolator(index: number, carouselProps: any): In
   return { inputRange, outputRange };
 }
 
-export function defaultAnimatedStyles(index: number, animatedValue: any, carouselProps: any) {
+export const defaultAnimatedStyles = (
+  index: number,
+  animatedValue: any,
+  carouselProps: { inactiveSlideOpacity: number; inactiveSlideScale: number; }
+  ) => {
   let animatedOpacity = {};
   let animatedScale = {};
 

@@ -1,79 +1,67 @@
-import { defaultAnimatedStyles, defaultScrollInterpolator, Interpolator } from 'components/animations';
+import { defaultAnimatedStyles, defaultScrollInterpolator } from 'components/animations';
 import React, { Component, createRef } from 'react';
 import { Animated, FlatList, NativeScrollEvent, NativeSyntheticEvent, StyleProp, ViewStyle } from 'react-native';
 
 export type CustomCarouselProps = {
-  ref?: any,
-  data: any[],
-  onScroll?: any,
-  onScrollEndDrag?: any,
-  onScrollBeginDrag?: any,
-  onSnapToItem?: any,
-  onBeforeSnapToItem?: any,
-  onTouchStart?: any,
-  sliderWidth: number,
-  itemWidth: number,
-  renderItem: any,
-  containerCustomStyle: any,
-  contentContainerCustomStyle?: any,
-  firstItem: number,
-  inactiveSlideOpacity: number,
-  inactiveSlideScale: number,
-  loop: boolean,
-  loopClonesPerSide: number,
-  slideStyle: any,
-  swipeThreshold: number,
-  autoplay: boolean,
-  autoplayDelay: number,
-  autoplayInterval: number,
-  style?: StyleProp<ViewStyle>,
+  ref?: any;
+  data: any[];
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onSnapToItem?: (index: number) => void;
+  sliderWidth: number;
+  itemWidth: number;
+  renderItem: any;
+  firstItem: number;
+  inactiveSlideOpacity: number;
+  inactiveSlideScale: number;
+  loop: boolean;
+  loopClonesPerSide: number;
+  swipeThreshold: number;
+  autoplay: boolean;
+  autoplayDelay: number;
+  autoplayInterval: number;
+  style?: StyleProp<ViewStyle>;
 };
 
 export type CustomCarouselState = {
-  hideCarousel: boolean,
-  interpolators: any[],
+  interpolators: Animated.AnimatedInterpolation[],
 };
+
+type Distance = { start: number; end: number; };
 
 export default class CustomCarousel extends Component<CustomCarouselProps, CustomCarouselState> {
   static defaultProps = {
-    containerCustomStyle: {},
-    contentContainerCustomStyle: {},
     firstItem: 0,
     inactiveSlideOpacity: 0.8,
     inactiveSlideScale: 0.9,
     loop: false,
     loopClonesPerSide: 3,
-    slideStyle: {},
     swipeThreshold: 30,
     autoplay: true,
     autoplayDelay: 1000,
     autoplayInterval: 3000,
   }
+
   private carouselRef: React.RefObject<FlatList> = createRef();
   private activeItem: number;
   private previousActiveItem: number;
   private previousFirstItem: number;
-  private previousItemsLength: number;
-  private mounted: boolean;
-  private positions: any[];
+  private itemToSnapTo?: number;
   private currentContentOffset: number;
-  private canFireBeforeCallback: boolean;
+  private scrollOffsetStart?: number;
+
+  private mounted: boolean;
+  private positions: Distance[];
+
   private canFireCallback: boolean;
-  private scrollOffsetRef?: any;
-  private onScrollTriggered: boolean;
   private scrollPosition?: Animated.Value;
   private onScrollHandler?: (...args: any[]) => void;
-  private itemToSnapTo?: number;
-  private autoplaying?: boolean;
-  private scrollStartOffset: number = 0;
-  private scrollStartActive: number = 0;
-  private scrollEndOffset: number = 0;
-  private scrollEndActive: number = 0;
-  private onLayoutInitDone: boolean = false;
-  private autoplay: boolean = false;
 
+  private scrollOffset: Distance = { start: 0, end: 0 };
+  private scrollActive: Distance = { start: 0, end: 0 };
+
+  private autoplay: boolean = false;
+  private autoplaying?: boolean;
   private autoplayInterval?: number;
-  private hackSlideAnimationTimeout?: number;
   private enableAutoplayTimeout?: number;
   private autoplayTimeout?: number;
 
@@ -81,7 +69,6 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
     super(props);
 
     this.state = {
-      hideCarousel: true,
       interpolators: []
     };
 
@@ -91,14 +78,11 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
     this.activeItem = initialActiveItem;
     this.previousActiveItem = initialActiveItem;
     this.previousFirstItem = initialActiveItem;
-    this.previousItemsLength = initialActiveItem;
     this.mounted = false;
     this.positions = [];
     this.currentContentOffset = 0; // store ScrollView's scroll position
-    this.canFireBeforeCallback = false;
     this.canFireCallback = false;
-    this.scrollOffsetRef = null;
-    this.onScrollTriggered = true; // used when momentum is enabled to prevent an issue with edges items
+    this.scrollOffsetStart = undefined;
 
     this.setScrollHandler();
   }
@@ -106,12 +90,6 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
   componentDidMount() {
     const { autoplay, firstItem } = this.props;
     const _firstItem = this.getFirstItem(firstItem);
-    const apparitionCallback = () => {
-      this.setState({ hideCarousel: false });
-      if (autoplay) {
-        this.startAutoplay();
-      }
-    };
 
     this.mounted = true;
     this.initPositionsAndInterpolators();
@@ -123,9 +101,9 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
       }
 
       this.snapToItem(_firstItem, false, false);
-      this.hackActiveSlideAnimation(_firstItem, 'start', true);
-
-      apparitionCallback();
+      if (autoplay) {
+        this.startAutoplay();
+      }
     });
   }
 
@@ -151,16 +129,8 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
 
     if (interpolators.length !== itemsLength || hasNewSliderWidth || hasNewItemWidth) {
       this.activeItem = nextActiveItem;
-      this.previousItemsLength = itemsLength;
 
       this.initPositionsAndInterpolators(this.props);
-
-      // Handle scroll issue when dynamically removing items (see #133)
-      // This also fixes first item's active state on Android
-      // Because 'initialScrollIndex' apparently doesn't trigger scroll
-      if (this.previousItemsLength > itemsLength) {
-        this.hackActiveSlideAnimation(nextActiveItem, undefined, true);
-      }
 
       if (hasNewSliderWidth || hasNewItemWidth) {
         this.snapToItem(nextActiveItem, false, false);
@@ -193,13 +163,19 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
     );
   }
 
+  private getCloneCount() {
+    const { loopClonesPerSide, data } = this.props;
+    const dataLength = data?.length;
+    return Math.min(dataLength, loopClonesPerSide);
+  }
+
   private enableLoop() {
     const { data, loop } = this.props;
-    return loop && data?.length && data.length > 1;
+    return loop && data?.length > 1;
   }
 
   private getCustomData(props = this.props) {
-    const { data, loopClonesPerSide } = props;
+    const { data } = props;
     const dataLength = data?.length;
 
     if (!dataLength) {
@@ -209,43 +185,23 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
     if (!this.enableLoop()) {
       return data;
     }
-
-    let previousItems = [];
-    let nextItems = [];
-
-    if (loopClonesPerSide > dataLength) {
-      const dataMultiplier = Math.floor(loopClonesPerSide / dataLength);
-      const remainder = loopClonesPerSide % dataLength;
-
-      for (let i = 0; i < dataMultiplier; i++) {
-        previousItems.push(...data);
-        nextItems.push(...data);
-      }
-
-      previousItems.unshift(...data.slice(-remainder));
-      nextItems.push(...data.slice(0, remainder));
-    } else {
-      previousItems = data.slice(-loopClonesPerSide);
-      nextItems = data.slice(0, loopClonesPerSide);
-    }
+    const cloneCount = this.getCloneCount();
+    const previousItems = data.slice(-cloneCount);
+    const nextItems = data.slice(0, cloneCount);
 
     return previousItems.concat(data, nextItems);
   }
 
   private getCustomDataLength(props = this.props) {
-    const { data, loopClonesPerSide } = props;
-    const dataLength = data && data.length;
-
-    if (!dataLength) {
+    const { data } = props;
+    if (!data?.length) {
       return 0;
     }
-
-    return this.enableLoop() ? dataLength + (2 * loopClonesPerSide) : dataLength;
+    return this.enableLoop() ? data.length + (2 * this.getCloneCount()) : data.length;
   }
 
   private getCustomIndex(index: number, props = this.props) {
     const itemsLength = this.getCustomDataLength(props);
-
     if (!itemsLength || (!index && index !== 0)) {
       return 0;
     }
@@ -254,40 +210,20 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
   }
 
   private getDataIndex(index: number) {
-    const { data, loopClonesPerSide } = this.props;
+    const { data } = this.props;
     const dataLength = data && data.length;
 
     if (!this.enableLoop() || !dataLength) {
       return index;
     }
 
-    if (index >= dataLength + loopClonesPerSide) {
-      return loopClonesPerSide > dataLength ?
-        (index - loopClonesPerSide) % dataLength :
-        index - dataLength - loopClonesPerSide;
-    } else if (index < loopClonesPerSide) {
-      // TODO: is there a simpler way of determining the interpolated index?
-      if (loopClonesPerSide > dataLength) {
-        const baseDataIndexes = [];
-        const dataIndexes = [];
-        const dataMultiplier = Math.floor(loopClonesPerSide / dataLength);
-        const remainder = loopClonesPerSide % dataLength;
-
-        for (let i = 0; i < dataLength; i++) {
-          baseDataIndexes.push(i);
-        }
-
-        for (let j = 0; j < dataMultiplier; j++) {
-          dataIndexes.push(...baseDataIndexes);
-        }
-
-        dataIndexes.unshift(...baseDataIndexes.slice(-remainder));
-        return dataIndexes[index];
-      } else {
-        return index + dataLength - loopClonesPerSide;
-      }
+    const cloneCount = this.getCloneCount();
+    if (index >= dataLength + cloneCount) {
+      return cloneCount > dataLength ? (index - cloneCount) % dataLength : index - dataLength - cloneCount;
+    } else if (index < cloneCount) {
+      return index + dataLength - cloneCount;
     } else {
-      return index - loopClonesPerSide;
+      return index - cloneCount;
     }
   }
 
@@ -308,7 +244,7 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
     }
   }
 
-  private getScrollOffset(event: NativeSyntheticEvent<any>): number {
+  private getScrollOffset(event: NativeSyntheticEvent<NativeScrollEvent>): number {
     return (event && event.nativeEvent && event.nativeEvent.contentOffset &&
       event.nativeEvent.contentOffset['x']) || 0;
   }
@@ -331,46 +267,14 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
     const { swipeThreshold } = this.props;
     const center = this.getCenter(offset);
     const centerOffset = swipeThreshold;
-
-    for (let i = 0; i < this.positions.length; i++) {
-      const { start, end } = this.positions[i];
-      if (center + centerOffset >= start && center - centerOffset <= end) {
-        return i;
-      }
-    }
-
     const lastIndex = this.positions.length - 1;
-    if (this.positions[lastIndex] && center - centerOffset > this.positions[lastIndex].end) {
-      return lastIndex;
-    }
+    const conditionIndex = this.positions.findIndex(
+      ({ start, end }) => center + centerOffset >= start && center - centerOffset <= end
+    )
 
-    return 0;
-  }
+    if (conditionIndex !== -1) return conditionIndex;
 
-  private hackActiveSlideAnimation(index: number, goTo?: string, force = false) {
-    const { data } = this.props;
-
-    if (!this.mounted || !this.carouselRef || !this.positions[index] || (!force && this.enableLoop())) {
-      return;
-    }
-
-    const offset = this.positions[index] && this.positions[index].start;
-
-    if (!offset && offset !== 0) {
-      return;
-    }
-
-    const itemsLength = data && data.length;
-    const direction = goTo || itemsLength === 1 ? 'start' : 'end';
-
-    this.scrollTo(offset + (direction === 'start' ? -1 : 1), false);
-
-    if (this.hackSlideAnimationTimeout != null) {
-      clearTimeout(this.hackSlideAnimationTimeout);
-    }
-    this.hackSlideAnimationTimeout = setTimeout(() => {
-      this.scrollTo(offset, false);
-    }, 50); // works randomly when set to '0'
+    return (this.positions[lastIndex] && center - centerOffset > this.positions[lastIndex].end) ? lastIndex : 0;
   }
 
   private repositionScroll(index: number) {
@@ -400,43 +304,39 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
       return;
     }
 
-    const options = {
-      offset,
-      animated
-    };
-
-    wrappedRef?.current?.scrollToOffset(options);
+    wrappedRef?.current?.scrollToOffset({ offset, animated });
   }
 
   private snapScroll(delta: number) {
     const { swipeThreshold } = this.props;
+    const { start, end } = this.scrollActive;
 
-    if (this.scrollStartActive !== this.scrollEndActive) {
+    if (start !== end) {
       // Snap to the new active item
-      this.snapToItem(this.scrollEndActive);
+      this.snapToItem(end);
     } else {
       // Snap depending on delta
       if (delta > 0) {
         if (delta > swipeThreshold) {
-          this.snapToItem(this.scrollStartActive + 1);
+          this.snapToItem(start + 1);
         } else {
-          this.snapToItem(this.scrollEndActive);
+          this.snapToItem(end);
         }
       } else if (delta < 0) {
         if (delta < -swipeThreshold) {
-          this.snapToItem(this.scrollStartActive - 1);
+          this.snapToItem(start - 1);
         } else {
-          this.snapToItem(this.scrollEndActive);
+          this.snapToItem(end);
         }
       } else {
         // Snap to current
-        this.snapToItem(this.scrollEndActive);
+        this.snapToItem(end);
       }
     }
   }
 
   private snapToItem(index: number, animated = true, fireCallback = true) {
-    const { onSnapToItem, onBeforeSnapToItem } = this.props;
+    const { onSnapToItem } = this.props;
     const itemsLength = this.getCustomDataLength();
     const wrappedRef = this.getWrappedRef();
 
@@ -444,48 +344,25 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
       return;
     }
 
-    if (!index || index < 0) {
-      index = 0;
-    } else if (itemsLength > 0 && index >= itemsLength) {
-      index = itemsLength - 1;
-    }
+    const nextIndex = Math.max(0, Math.min(index, itemsLength - 1));
 
-    if (index !== this.previousActiveItem) {
-      this.previousActiveItem = index;
+    if (nextIndex !== this.previousActiveItem) {
+      this.previousActiveItem = nextIndex;
 
-      if (fireCallback) {
-        if (onBeforeSnapToItem) {
-          this.canFireBeforeCallback = true;
-        }
-
-        if (onSnapToItem) {
-          this.canFireCallback = true;
-        }
+      if (fireCallback && onSnapToItem) {
+        this.canFireCallback = true;
       }
     }
 
-    this.itemToSnapTo = index;
-    this.scrollOffsetRef = this.positions[index] && this.positions[index].start;
-    this.onScrollTriggered = false;
+    this.itemToSnapTo = nextIndex;
+    this.scrollOffsetStart = this.positions[nextIndex]?.start;
 
-    if (!this.scrollOffsetRef && this.scrollOffsetRef !== 0) {
+    if (!this.scrollOffsetStart && this.scrollOffsetStart !== 0) {
       return;
     }
 
-    this.scrollTo(this.scrollOffsetRef, animated);
-
-    this.scrollEndOffset = this.currentContentOffset;
-  }
-
-  private onBeforeSnap(index: number) {
-    const { onBeforeSnapToItem } = this.props;
-
-    if (!this.carouselRef) {
-      return;
-    }
-
-    this.canFireBeforeCallback = false;
-    onBeforeSnapToItem && onBeforeSnapToItem(index);
+    this.scrollTo(this.scrollOffsetStart, animated);
+    this.scrollOffset.end = this.currentContentOffset;
   }
 
   initPositionsAndInterpolators = (props = this.props) => {
@@ -496,7 +373,7 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
       return;
     }
 
-    let interpolators: any[] = [];
+    let interpolators: Animated.AnimatedInterpolation[] = [];
     this.positions = [];
 
     this.getCustomData(props).forEach((itemData, index) => {
@@ -508,14 +385,16 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
         end: index * sizeRef + sizeRef
       };
 
-      let interpolator: Interpolator = defaultScrollInterpolator(_index, props);
+      let interpolator: Animated.InterpolationConfigType = defaultScrollInterpolator(_index, props);
 
-      animatedValue = this.scrollPosition?.interpolate({
-        ...interpolator,
-        extrapolate: 'clamp'
-      });
+      if (this.scrollPosition) {
+        animatedValue = this.scrollPosition.interpolate({
+          ...interpolator,
+          extrapolate: 'clamp',
+        });
 
-      interpolators.push(animatedValue);
+        interpolators.push(animatedValue);
+      }
     });
 
     this.setState({ interpolators });
@@ -525,22 +404,16 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
     return `flatlist-item-${index}`;
   }
 
-  onScroll = (event: NativeSyntheticEvent<any>) => {
+  onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { onScroll } = this.props;
 
     const scrollOffset = event ? this.getScrollOffset(event) : this.currentContentOffset;
     const nextActiveItem = this.getActiveItem(scrollOffset);
     const itemReached = nextActiveItem === this.itemToSnapTo;
-    const scrollConditions = scrollOffset >= this.scrollOffsetRef && scrollOffset <= this.scrollOffsetRef;
-
+    const scrollConditions = scrollOffset >= Number(this.scrollOffsetStart) && scrollOffset <= Number(this.scrollOffsetStart);
     this.currentContentOffset = scrollOffset;
-    this.onScrollTriggered = true;
 
     if (this.activeItem !== nextActiveItem && itemReached) {
-      if (this.canFireBeforeCallback) {
-        this.onBeforeSnap(this.getDataIndex(nextActiveItem));
-      }
-
       if (scrollConditions) {
         this.activeItem = nextActiveItem;
         if (this.canFireCallback) {
@@ -549,7 +422,7 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
       }
     }
 
-    if (nextActiveItem === this.itemToSnapTo && scrollOffset === this.scrollOffsetRef) {
+    if (nextActiveItem === this.itemToSnapTo && scrollOffset === this.scrollOffsetStart) {
       this.repositionScroll(nextActiveItem);
     }
 
@@ -559,68 +432,39 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
   }
 
   onTouchStart = () => {
-    const { onTouchStart } = this.props
-
     if (this.autoplaying) {
       this.pauseAutoPlay();
-    }
-
-    if (onTouchStart) {
-      onTouchStart()
     }
   }
 
   onScrollBeginDrag = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { onScrollBeginDrag } = this.props;
-    this.scrollStartOffset = this.getScrollOffset(event);
-    this.scrollStartActive = this.getActiveItem(this.scrollStartOffset);
-
-    if (onScrollBeginDrag) {
-      onScrollBeginDrag(event);
-    }
+    this.scrollOffset.start = this.getScrollOffset(event);
+    this.scrollActive.start = this.getActiveItem(this.scrollOffset.start);
   }
 
   onScrollEndDrag = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { onScrollEndDrag } = this.props;
-
     if (this.carouselRef?.current) {
       this.onTouchEnd && this.onTouchEnd();
-    }
-
-    if (onScrollEndDrag) {
-      onScrollEndDrag(event);
     }
   }
 
   onTouchEnd = () => {
     const { autoplayDelay } = this.props;
 
-    if (this.currentContentOffset === this.scrollEndOffset) {
+    if (this.currentContentOffset === this.scrollOffset.end) {
       return;
     }
 
-    this.scrollEndOffset = this.currentContentOffset;
-    this.scrollEndActive = this.getActiveItem(this.scrollEndOffset);
+    this.scrollOffset.end = this.currentContentOffset;
+    this.scrollActive.end = this.getActiveItem(this.scrollOffset.end);
 
-    this.snapScroll(this.scrollEndOffset - this.scrollStartOffset);
+    this.snapScroll(this.scrollOffset.end - this.scrollOffset.start);
 
     if (this.autoplay && !this.autoplaying) {
-      if (this.enableAutoplayTimeout != null) {
-        clearTimeout(this.enableAutoplayTimeout);
-      }
+      this.enableAutoplayTimeout && clearTimeout(this.enableAutoplayTimeout);
       this.enableAutoplayTimeout = setTimeout(() => {
         this.startAutoplay();
       }, autoplayDelay + 50);
-    }
-  }
-
-  onLayout = () => {
-    // Prevent unneeded actions during the first 'onLayout' (triggered on init)
-    if (this.onLayoutInitDone) {
-      this.initPositionsAndInterpolators();
-      this.snapToItem(this.activeItem, false, false);
-    } else {
-      this.onLayoutInitDone = true;
     }
   }
 
@@ -663,7 +507,6 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
 
   stopAutoplay() {
     this.pauseAutoPlay();
-    this.hackSlideAnimationTimeout && clearTimeout(this.hackSlideAnimationTimeout);
   }
 
   snapToNext(animated = true, fireCallback = true) {
@@ -684,7 +527,6 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
     const {
       itemWidth,
       renderItem,
-      slideStyle,
     } = this.props;
 
     const animatedValue = interpolators && interpolators[index];
@@ -693,30 +535,26 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
       return null;
     }
 
-    const Component = Animated.View;
-    const animatedStyle = defaultAnimatedStyles(index, animatedValue, this.props);
-    const mainDimension = { width: itemWidth };
-    const specificProps = {};
+    const animatedStyle = {
+      ...defaultAnimatedStyles(index, animatedValue, this.props),
+      width: itemWidth,
+    };
 
     return (
-      <Component style={[mainDimension, slideStyle, animatedStyle]} pointerEvents={'box-none'} {...specificProps}>
+      <Animated.View style={animatedStyle} pointerEvents={'box-none'} >
         {renderItem({ item, index })}
-      </Component>
+      </Animated.View>
     );
   }
 
   render() {
-    const { hideCarousel } = this.state;
     const {
-      containerCustomStyle,
-      contentContainerCustomStyle,
       sliderWidth,
       style,
       itemWidth,
       loopClonesPerSide,
+      data, renderItem,
     } = this.props;
-
-    const { data, renderItem } = this.props;
 
     if (!data || !renderItem) {
       return null;
@@ -737,20 +575,15 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
       onScrollEndDrag: this.onScrollEndDrag,
       onTouchStart: this.onTouchStart,
       onTouchEnd: this.onTouchEnd,
-      onLayout: this.onLayout,
       keyExtractor: this.getKeyExtractor,
       onScroll: this.onScrollHandler,
       scrollEventThrottle: 1,
-      contentContainerStyle: [
-        {
-          paddingLeft: this.getContainerInnerMargin(),
-          paddingRight: this.getContainerInnerMargin()
-        },
-        contentContainerCustomStyle || {}
-      ],
+      contentContainerStyle: {
+        paddingLeft: this.getContainerInnerMargin(),
+        paddingRight: this.getContainerInnerMargin()
+      },
       style: [
-        containerCustomStyle || style || {},
-        hideCarousel ? { opacity: 0 } : {},
+        style || {},
         { width: sliderWidth, flexDirection: 'row' }
       ],
       initialNumToRender,
@@ -760,7 +593,6 @@ export default class CustomCarousel extends Component<CustomCarouselProps, Custo
       pinchGestureEnabled: false,
       scrollsToTop: false,
       removeClippedSubviews: true,
-      decelerationRate: 'fast',
       showsHorizontalScrollIndicator: false,
       showsVerticalScrollIndicator: false,
       overScrollMode: 'never',
