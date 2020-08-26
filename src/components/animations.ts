@@ -11,14 +11,14 @@
 
 import { Animated } from 'react-native';
 
-export const getInputRangeFromIndexes = (range: number[], index: number, carouselProps: any): number[] => {
-  return range.map((rangeData) => (index - rangeData) * carouselProps.itemWidth);
+export const getInputRangeFromIndexes = (range: number[], index: number, { itemWidth } : {itemWidth: number}): number[] => {
+  return range.map((rangeData) => (index - rangeData) * itemWidth);
 }
 
 // Default behavior
 // Scale and/or opacity effect
 // Based on props 'inactiveSlideOpacity' and 'inactiveSlideScale'
-export const defaultScrollInterpolator = (index: number, carouselProps: any): Animated.InterpolationConfigType => {
+export const defaultScrollInterpolator = (index: number, carouselProps: {itemWidth: number}): Animated.InterpolationConfigType => {
   const range = [1, 0, -1];
   const inputRange = getInputRangeFromIndexes(range, index, carouselProps);
   const outputRange = [0, 1, 0];

@@ -1,4 +1,5 @@
 import CustomCarousel from 'components/section/CustomCarousel';
+// import { SampleCarousel } from 'components/section/SampleCarousel';
 import * as React from 'react';
 import { Dimensions, SafeAreaView, Text, View } from 'react-native';
 
@@ -62,7 +63,7 @@ export class CarouselApp extends React.Component<{}, CarouselAppState> {
     const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
     const marginTop = (screenHeight - 250) / 2;
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: 'black' }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: 'skyblue' }}>
         <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'center', marginTop }}>
           <CustomCarousel
             data={carouselItems}
@@ -75,6 +76,7 @@ export class CarouselApp extends React.Component<{}, CarouselAppState> {
             loopClonesPerSide={carouselItems.length}
             onSnapToItem={(index: number) => this.setState({ activeIndex: index })} />
         </View>
+        <Text style={{ backgroundColor: 'white'}}>{this.state.activeIndex}</Text>
       </SafeAreaView>
     );
   }
