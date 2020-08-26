@@ -1,7 +1,8 @@
+import CustomCarousel from 'components/section/CustomCarousel';
 import * as React from 'react';
 import { Dimensions, SafeAreaView, Text, View } from 'react-native';
 
-import Carousel from 'react-native-snap-carousel';
+// import Carousel from 'react-native-snap-carousel';
 
 type CarouselAppState = {
   carouselItems: any[];
@@ -53,7 +54,6 @@ export class CarouselApp extends React.Component<{}, CarouselAppState> {
         <Text style={{ fontSize: 30, textAlign: 'center', lineHeight: 100 }}>{item.title}</Text>
         <Text style={{ textAlign: 'center', lineHeight: 100 }}>{item.text}</Text>
       </View>
-
     )
   }
 
@@ -62,10 +62,9 @@ export class CarouselApp extends React.Component<{}, CarouselAppState> {
     const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
     const marginTop = (screenHeight - 250) / 2;
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: 'rebeccapurple' }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: 'black' }}>
         <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'center', marginTop }}>
-          <Carousel
-            layout={'default'}
+          <CustomCarousel
             data={carouselItems}
             sliderWidth={screenWidth}
             itemWidth={screenWidth - 20}
@@ -74,7 +73,7 @@ export class CarouselApp extends React.Component<{}, CarouselAppState> {
             autoplayDelay={300}
             loop={true}
             loopClonesPerSide={carouselItems.length}
-            onSnapToItem={index => this.setState({ activeIndex: index })} />
+            onSnapToItem={(index: number) => this.setState({ activeIndex: index })} />
         </View>
       </SafeAreaView>
     );
