@@ -11,26 +11,30 @@
 
 import { Animated } from 'react-native';
 
-export const getInputRangeFromIndexes = (range: number[], index: number, { itemWidth } : {itemWidth: number}): number[] => {
+export const getInputRangeFromIndexes = (
+  range: number[],
+  index: number,
+  { itemWidth }: { itemWidth: number },
+): number[] => {
   return range.map((rangeData) => (index - rangeData) * itemWidth);
-}
+};
 
-// Default behavior
-// Scale and/or opacity effect
-// Based on props 'inactiveSlideOpacity' and 'inactiveSlideScale'
-export const defaultScrollInterpolator = (index: number, carouselProps: {itemWidth: number}): Animated.InterpolationConfigType => {
+export const scrollInterpolator = (
+  index: number,
+  carouselProps: { itemWidth: number },
+): Animated.InterpolationConfigType => {
   const range = [1, 0, -1];
   const inputRange = getInputRangeFromIndexes(range, index, carouselProps);
   const outputRange = [0, 1, 0];
 
   return { inputRange, outputRange };
-}
+};
 
-export const defaultAnimatedStyles = (
+export const animatedStyles = (
   index: number,
   animatedValue: any,
-  carouselProps: { inactiveSlideOpacity: number; inactiveSlideScale: number; }
-  ) => {
+  carouselProps: { inactiveSlideOpacity: number; inactiveSlideScale: number },
+) => {
   let animatedOpacity = {};
   let animatedScale = {};
 
@@ -38,24 +42,26 @@ export const defaultAnimatedStyles = (
     animatedOpacity = {
       opacity: animatedValue.interpolate({
         inputRange: [0, 1],
-        outputRange: [carouselProps.inactiveSlideOpacity, 1]
-      })
+        outputRange: [carouselProps.inactiveSlideOpacity, 1],
+      }),
     };
   }
 
   if (carouselProps.inactiveSlideScale < 1) {
     animatedScale = {
-      transform: [{
-        scale: animatedValue.interpolate({
-          inputRange: [0, 1],
-          outputRange: [carouselProps.inactiveSlideScale, 1]
-        })
-      }]
+      transform: [
+        {
+          scale: animatedValue.interpolate({
+            inputRange: [0, 1],
+            outputRange: [carouselProps.inactiveSlideScale, 1],
+          }),
+        },
+      ],
     };
   }
 
   return {
     ...animatedOpacity,
-    ...animatedScale
+    ...animatedScale,
   };
-}
+};

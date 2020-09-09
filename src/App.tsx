@@ -1,25 +1,40 @@
+import { DownloadProgress } from 'components/DownloadProgress';
 import { registerRootComponent } from 'expo';
-import { StatusBar } from 'expo-status-bar';
-import React from 'react';
-import { View } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { CarouselApp } from './components/Carousel';
-import { Navigation3 } from './navigation/Navigation3';
-import { Navigation2 } from './navigation/Navigation2';
+import React, { useCallback, useState } from 'react';
+import { Button } from 'react-native';
 
 import useCachedResources from './hooks/useCachedResources';
 import useColorScheme from './hooks/useColorScheme';
-import Navigation from './navigation';
 
 export default function App() {
   const isLoadingComplete = useCachedResources();
   const colorScheme = useColorScheme();
 
+  const [progress, setProgress] = useState(0);
+  const handlePress = useCallback(() => {
+    setProgress(progress + 10 > 100 ? 0 : progress + 10);
+  }, [progress]);
+
   if (!isLoadingComplete) {
     return null;
   } else {
+    // return (<CarouselApp />);
+    // return (
+    //   <DownloadProgress
+    //     activeColor="darkgrey"
+    //     passiveColor="darkviolet"
+    //     baseColor="white"
+    //     width={30}
+    //     percent={100}
+    //     radius={15}
+    //     duration={1000}
+    //   />
+    // );
     return (
-      <CarouselApp />
+      <>
+        <DownloadProgress percent={progress} />
+        <Button onPress={handlePress} title={'click'} />
+      </>
     );
   }
 }
